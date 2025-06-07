@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+
+<head>
+    <title>MIB Browser</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}" />
+    <meta charset="UTF-8">
+</head>
+<body>
+
+<div class="container">
+    <div class="header">
+        <h1>🌐 SNMP Protocol Operations & Transport Mappings Simulator</h1>
+    </div>
+<div class="main-content" style="max-width: 100%;">
+  <div class="top-panels" style="display: flex; flex-direction: column; gap: 20px; max-width: 100%;">
+    <form th:action="@{/devices/search}" method="post">
+
+      <div class="block">
+        <!-- Coloana 1 -->
+        <div class="panel" style="flex: 1;">
+          <h2>Transport Configuration</h2>
+          <div style="display: flex; flex-direction: column; gap: 15px;">
+            <div class="form-group">
+              <label>IP Address:</label>
+              <input type="text" name="ipAddress" />
+            </div>
+            <div class="form-group">
+              <label>Port:</label>
+              <input type="number" name="port" value="161" />
+            </div>
+            <div class="form-group">
+              <label>Protocol:</label>
+              <select id="protocol" name="protocol">
+                <option value="UDP" selected>UDP</option>
+                <option value="TCP">TCP</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="timeout">Timeout (ms):</label>
+              <input type="number" id="timeout" name="timeout" value="5000" />
+            </div>
+            <div class="form-group">
+              <label for="retryCount">Retry Count:</label>
+              <input type="number" id="retryCount" name="retryCount" value="3" />
+            </div>
+			<div class="form-group">
+			  <label for="description">Connection Status:</label>
+			  <input type="text" id="description" name="description" readonly />
+			</div>
+            
+          </div>
+        </div>
+
+        <div class="panel" style="flex: 1;">
+          <h2>SNMP Search</h2>
+          <div style="display: flex; flex-direction: column; gap: 15px;">
+            <div class="form-group">
+              <label>OID:</label>
+              <input type="text" name="oid" />
+            </div>
+            <div class="form-group">
+              <label>Read Community:</label>
+              <input type="text" name="readCommunity" />
+            </div>
+            <div class="form-group">
+              <label>Write Community:</label>
+              <input type="text" name="writeCommunity" />
+            </div>
+            <div class="form-group">
+              <label>SNMP Version:</label>
+              <select name="snmpVersion">
+                <option value="1">v1</option>
+                <option value="2c" selected>v2c</option>
+                <option value="3">v3</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Operation:</label>
+              <select id="operationType" name="operationType">
+                <option value="Get">Get</option>
+                <option value="GetNext">Get Next</option>
+                <option value="Set">Set</option>
+                <option value="Walk">Walk</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Value:</label>
+              <input type="text" id="valueInput" name="value" disabled />
+            </div>
+          </div>
+        </div>
+      </div>
+	<div style="display: flex; justify-content: center; gap: 30px; margin-top: 30px;">
+	    <button type="button" id="testConnectionBtn" class="btn">Test Connection</button>
+	    <button type="submit" class="btn" id="searchBtn" style="padding: 10px 20px;" disabled>Search</button>
+	    <button type="button" id="clearResultsBtn" class="btn">Clear Results</button>
+	</div>
+    </form>
+    <div class="bottom-panel" style="margin-top: 20px;">
+    <h2>Traps Received</h2>
+    <button onclick="loadTraps()" class="btn">Refresh Traps</button>
+    <pre id="trapArea" style="background: #f0f0f0; padding: 10px;"></pre>
+</div>
+  </div>
+</div>
+    <div class="bottom-panel" style="margin-top: 20px; width: 100%;">
+        <h2>Results</h2>
+        <div >
+            <table style="width: 100%; table-layout: auto; white-space: nowrap;">
+                <thead>
+                <tr >
+                    <th>ID</th>
+                    <th>IP Address</th>
+                    <th>Community</th>
+                    <th>OID</th>
+                    <th>Online</th>
+                    <th>Description</th>
+                    <th>Uptime (s)</th>
+                </tr>
+                </thead>
+                <tbody class="output-area">
+                <tr th:each="device : ${devices}">
+                    <td th:text="${device.id}"></td>
+                    <td th:text="${device.ipAddress}"></td>
+                    <td th:text="${device.sysDescr == null ? 'No SNMP response' : #strings.defaultString(device.community, 'No SNMP response')}"></td>
+                    <td th:text="${device.description}"></td>
+                    <td th:text="${device.online}"></td>
+                    <td th:text="${#strings.defaultString(device.sysDescr, 'No SNMP response')}"></td>
+                    <td th:text="${device.uptimeSeconds}"></td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<script>
+	document.getElementById("operationType").addEventListener("change", function () {
+	    const valueInput = document.getElementById("valueInput");
+	    
+	    if (this.value === "Set") {
+	        valueInput.disabled = false;
+	    } else {
+	        valueInput.disabled = true; 
+	        valueInput.value = "";
+	    }
+	});
+
+	document.addEventListener("DOMContentLoaded", () => {
+	    const descriptionInput = document.getElementById("description");
+	    descriptionInput.value = "Please press the Test Connection button";
+	    descriptionInput.style.color = "red";
+	    document.getElementById("searchBtn").disabled = true;
+	});
+
+	document.getElementById("testConnectionBtn").addEventListener("click", async function () {
+	    const ip = document.querySelector("input[name='ipAddress']").value;
+	    const descriptionInput = document.getElementById("description");
+	    const searchBtn = document.getElementById("searchBtn");
+
+	    if (!ip) {
+	        alert("Please enter an IP address.");
+	        return;
+	    }
+
+	    try {
+	        const response = await fetch(`/test-connection?ip=${encodeURIComponent(ip)}`);
+	        const result = await response.text();
+
+	        descriptionInput.value = result;
+	        descriptionInput.style.color = "white";
+
+	        if (result.toLowerCase().includes("traceroute successful")) {
+	            searchBtn.disabled = false;
+	        } else {
+	            searchBtn.disabled = true;
+	        }
+	    } catch (error) {
+	        console.error("Error while testing connection:", error);
+	        descriptionInput.value = "Error testing connection";
+	        descriptionInput.style.color = "red"; 
+	        searchBtn.disabled = true;
+	    }
+	});
+
+	
+	document.getElementById("clearResultsBtn").addEventListener("click", function () {
+	    const tableBody = document.querySelector(".output-area");
+	    tableBody.innerHTML = "";
+
+	    document.querySelector("input[name='ipAddress']").value = "";
+	    document.querySelector("input[name='oid']").value = "";
+	    document.querySelector("input[name='readCommunity']").value = "";
+	    document.querySelector("input[name='writeCommunity']").value = "";
+	    document.querySelector("input[name='value']").value = "";
+	    document.querySelector("input[name='timeout']").value = "5000";
+	    document.querySelector("input[name='retryCount']").value = "3";
+	    document.getElementById("description").value = "";
+
+	    document.getElementById("searchBtn").disabled = true;
+	});
+
+	async function loadTraps() {
+        const response = await fetch("/snmp-traps");
+        const traps = await response.json();
+        document.getElementById("trapArea").textContent = traps.join("\n\n");
+    }
+
+    setInterval(loadTraps, 10000);
+</script>
+</body>
+</html>
+
+
